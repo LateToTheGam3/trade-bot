@@ -1,27 +1,24 @@
 import time
 import schedule
 from datetime import datetime
-
 from alpaca_client import get_account, get_positions, get_open_orders, place_order, cancel_all_orders
 from data_feed import get_news_sentiment
 from claude_brain import decide_trades
 from risk_manager import check_daily_limits, validate_trade
-from logger import log_trade, get_daily_ppl, print_daily_summary
+from logger import log_trade, get_daily_ppl, print_daily_summary, log_recommendation
 
-# ── Settings ─────────────────────────────────────────────────────
 RUN_INTERVAL_MINUTES = 30
-TRADE_AMOUNT_USD     = 500      # per trade
-TICKERS_TO_WATCH     = ["AAPL", "NVDA", "TSLA", "MSFT", "AMZN"]
-
+TRADE_AMOUNT_USD = 500
+TICKERS_TO_WATCH = ["AAPL", "NVDA", "TSLA", "MSFT", "AMZN"]
 TICKER_TO_NAME = {
-    "AAPL":  "Apple",
-    "NVDA":  "Nvidia",
-    "TSLA":  "Tesla",
-    "MSFT":  "Microsoft",
-    "AMZN":  "Amazon"
+    "AAPL": "Apple",
+    "NVDA": "Nvidia",
+    "TSLA": "Tesla",
+    "MSFT": "Microsoft",
+    "AMZN": "Amazon"
 }
 
-def get_portfolio_summary(positions: list) -> str:
+def get_portfolio_summary(positions):
     if not positions:
         return "No open positions."
     lines = []
@@ -34,7 +31,7 @@ def get_portfolio_summary(positions: list) -> str:
         )
     return "\n".join(lines)
 
-def build_cash_dict(account: dict) -> dict:
+def build_cash_dict(account):
     return {
         "free": float(account["cash"]),
         "total": float(account["portfolio_value"]),
@@ -43,92 +40,100 @@ def build_cash_dict(account: dict) -> dict:
 
 def run_trading_cycle():
     print(f"\n{'='*50}")
-    print(f"🤖 Trading cycle — {datetime.now().strftime('%H:%M:%S')}")
+    print(f"Trading cycle — {datetime.now().strftime('%H:%M:%S')}")
     print(f"{'='*50}")
 
-    # ── 1. Get account state ──────────────────────────────────────
     try:
-        account   = get_account()
+        account = get_account()
         positions = get_positions()
-        cash      = build_cash_dict(account)
+        cash = build_cash_dict(account)
     except Exception as e:
-        print(f"❌ Failed to get account data: {e}")
+        print(f"Failed to get account data: {e}")
         return
 
-    print(f"💰 Cash: ${cash['free']:,.2f} | Portfolio: ${cash['total']:,.2f}")
+    print(f"Cash: ${cash['free']:,.2f} | Portfolio: ${cash['total']:,.2f}")
 
-    # ── 2. Check daily limits ─────────────────────────────────────
     daily_ppl = get_daily_ppl()
-    limits    = check_daily_limits(daily_ppl)
-    print(f"📈 Today's realised P&L: £{daily_ppl:.2f}")
+    limits = check_daily_limits(daily_ppl)
+    print(f"Today's realised P&L: {daily_ppl:.2f}")
 
     if not limits["can_trade"]:
-        print(f"🛑 {limits['reason']}")
+        print(f"Limit hit: {limits['reason']}")
         print_daily_summary()
         return
 
-    # ── 3. Get news signals ───────────────────────────────────────
-    print(f"\n📰 Fetching news signals...")
+    print(f"\nFetching news signals...")
     signals = []
     for ticker in TICKERS_TO_WATCH:
         try:
             signal = get_news_sentiment(ticker)
-            # Normalise ticker name for Alpaca
             signal["ticker"] = ticker
             signals.append(signal)
-            emoji = "🟢" if signal["signal"] == "BUY" else "🔴" if signal["signal"] == "SELL" else "⚪"
-            print(f"  {emoji} {ticker}: {signal['signal']} | {signal['sentiment']} | confidence={signal['confidence']:.2f}")
+            print(f"  {ticker}: {signal['signal']} | confidence={signal['confidence']:.2f}")
         except Exception as e:
-            print(f"  ⚠️  {ticker}: failed — {e}")
+            print(f"  {ticker}: failed — {e}")
 
     if not signals:
-        print("❌ No signals — skipping cycle")
+        print("No signals — skipping cycle")
         return
 
-    # ── 4. Ask Claude brain for decisions ─────────────────────────
-    print(f"\n🧠 Asking Claude for trade decisions...")
+    print(f"\nAsking Claude for trade decisions...")
     portfolio_summary = get_portfolio_summary(positions)
 
     try:
         trades = decide_trades(portfolio_summary, cash, signals)
     except Exception as e:
-        print(f"❌ Claude brain failed: {e}")
+        print(f"Claude brain failed: {e}")
         return
 
     if not trades:
-        print("  No trades recommended this cycle.")
+        print("No trades recommended this cycle.")
         print_daily_summary()
         return
 
-    print(f"  {len(trades)} trade(s) suggested")
+    print(f"{len(trades)} trade(s) suggested")
+    print(f"\nExecuting trades...")
 
-    # ── 5. Validate and execute ───────────────────────────────────
-    print(f"\n⚡ Executing trades...")
     for trade in trades:
-        ticker    = trade.get("ticker")
+        ticker = trade.get("ticker")
         direction = trade.get("direction", "BUY").lower()
-        reason    = trade.get("reason", "")
-
-        # Map direction to Alpaca side
+        reason = trade.get("reason", "")
         side = "buy" if direction == "buy" else "sell"
 
         print(f"\n  {side.upper()} {ticker} — {reason}")
 
-        # Validate signal confidence
         signal = next((s for s in signals if s["ticker"] == ticker), None)
+
         if not signal or signal["confidence"] < 0.6:
-            print(f"  ❌ Skipped — confidence too low")
+            log_recommendation(
+                ticker, side.upper(), reason,
+                signal["confidence"] if signal else 0,
+                executed=False,
+                skip_reason="low confidence"
+            )
+            print(f"  Skipped — confidence too low")
             continue
 
         confirm = input(f"  Execute? (y/n): ").strip().lower()
         if confirm != "y":
-            print("  ⏭️  Skipped")
+            log_recommendation(
+                ticker, side.upper(), reason,
+                signal["confidence"],
+                executed=False,
+                skip_reason="user skipped"
+            )
+            print("  Skipped")
             continue
 
         try:
             order = place_order(ticker, TRADE_AMOUNT_USD, side)
             if order.get("id"):
-                print(f"  ✅ Order placed: {order['id']} | {order.get('status')}")
+                log_recommendation(
+                    ticker, side.upper(), reason,
+                    signal["confidence"],
+                    executed=True
+                )
+                print(f"  Order placed: {order['id']} | {order.get('status')}")
                 log_trade({
                     "ticker": ticker,
                     "direction": side.upper(),
@@ -138,30 +143,27 @@ def run_trading_cycle():
                     "reason": reason
                 }, order)
             else:
-                print(f"  ❌ Order failed: {order}")
+                print(f"  Order failed: {order}")
         except Exception as e:
-            print(f"  ❌ Error: {e}")
+            print(f"  Error: {e}")
 
     print_daily_summary()
 
-
 def run_scheduler():
-    print("🚀 Alpaca Day Trading Bot started!")
-    print(f"   Watching: {', '.join(TICKERS_TO_WATCH)}")
-    print(f"   Trade size: ${TRADE_AMOUNT_USD} per trade")
-    print(f"   Daily target: £30")
-    print(f"   Max daily loss: £50")
-    print(f"   Runs every {RUN_INTERVAL_MINUTES} minutes")
+    print("Alpaca Day Trading Bot started!")
+    print(f"  Watching: {', '.join(TICKERS_TO_WATCH)}")
+    print(f"  Trade size: ${TRADE_AMOUNT_USD} per trade")
+    print(f"  Daily target: 30")
+    print(f"  Max daily loss: 50")
+    print(f"  Runs every {RUN_INTERVAL_MINUTES} minutes")
     print("\nPress Ctrl+C to stop\n")
 
     run_trading_cycle()
-
     schedule.every(RUN_INTERVAL_MINUTES).minutes.do(run_trading_cycle)
 
     while True:
         schedule.run_pending()
         time.sleep(60)
-
 
 if __name__ == "__main__":
     run_scheduler()
