@@ -1,0 +1,785 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Trade Bot — Performance Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #0a0c10;
+    --surface: #111318;
+    --surface2: #181c24;
+    --border: #1e2330;
+    --accent: #00d68f;
+    --accent2: #0095ff;
+    --danger: #ff4757;
+    --warn: #ffd32a;
+    --text: #e8eaf0;
+    --muted: #4a5068;
+    --mono: 'IBM Plex Mono', monospace;
+    --sans: 'IBM Plex Sans', sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 14px;
+    line-height: 1.6;
+    min-height: 100vh;
+  }
+
+  /* Grid noise texture overlay */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(0,214,143,0.015) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,214,143,0.015) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 32px 24px;
+    position: relative;
+    z-index: 1;
+  }
+
+  /* Header */
+  header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    margin-bottom: 40px;
+    padding-bottom: 24px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .header-left h1 {
+    font-family: var(--mono);
+    font-size: 22px;
+    font-weight: 600;
+    color: var(--accent);
+    letter-spacing: -0.5px;
+  }
+
+  .header-left h1 span {
+    color: var(--muted);
+    font-weight: 400;
+  }
+
+  .header-left .subtitle {
+    font-size: 12px;
+    color: var(--muted);
+    font-family: var(--mono);
+    margin-top: 4px;
+  }
+
+  .live-badge {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    text-align: right;
+  }
+
+  .live-dot {
+    width: 7px;
+    height: 7px;
+    background: var(--accent);
+    border-radius: 50%;
+    animation: pulse 2s infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+  }
+
+  /* KPI row */
+  .kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 12px;
+    margin-bottom: 28px;
+  }
+
+  .kpi {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px 18px;
+    position: relative;
+    overflow: hidden;
+    transition: border-color 0.2s;
+  }
+
+  .kpi:hover { border-color: var(--accent); }
+
+  .kpi::after {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, var(--accent), transparent);
+    opacity: 0.6;
+  }
+
+  .kpi-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+
+  .kpi-value {
+    font-family: var(--mono);
+    font-size: 28px;
+    font-weight: 600;
+    color: var(--text);
+    line-height: 1;
+  }
+
+  .kpi-value.accent { color: var(--accent); }
+  .kpi-value.danger { color: var(--danger); }
+  .kpi-value.warn { color: var(--warn); }
+
+  .kpi-sub {
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 6px;
+  }
+
+  /* Charts row */
+  .charts-row {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    gap: 16px;
+    margin-bottom: 20px;
+  }
+
+  /* Panels */
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 16px;
+  }
+
+  .panel-title {
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--muted);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .panel-title::before {
+    content: '';
+    display: inline-block;
+    width: 3px;
+    height: 12px;
+    background: var(--accent);
+    border-radius: 2px;
+  }
+
+  /* Bottom grid */
+  .bottom-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 16px;
+  }
+
+  /* Table */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+
+  thead th {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+    text-align: left;
+    padding: 6px 10px 10px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  tbody tr {
+    border-bottom: 1px solid var(--border);
+    transition: background 0.15s;
+  }
+
+  tbody tr:hover { background: var(--surface2); }
+  tbody tr:last-child { border-bottom: none; }
+
+  td {
+    padding: 10px;
+    vertical-align: middle;
+  }
+
+  .time-cell {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    white-space: nowrap;
+  }
+
+  .reason-cell {
+    font-size: 12px;
+    color: #8890aa;
+    max-width: 220px;
+  }
+
+  .ticker-tag {
+    font-family: var(--mono);
+    font-size: 12px;
+    font-weight: 600;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    padding: 2px 8px;
+    border-radius: 4px;
+    color: var(--accent2);
+  }
+
+  .dir {
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 3px;
+  }
+
+  .dir.buy { background: rgba(0,214,143,0.12); color: var(--accent); }
+  .dir.sell { background: rgba(255,71,87,0.12); color: var(--danger); }
+
+  .badge {
+    font-family: var(--mono);
+    font-size: 10px;
+    padding: 2px 7px;
+    border-radius: 3px;
+    white-space: nowrap;
+  }
+
+  .badge.exec { background: rgba(0,149,255,0.15); color: var(--accent2); }
+  .badge.skip { background: rgba(255,211,42,0.1); color: var(--warn); }
+
+  .pos { color: var(--accent); font-family: var(--mono); font-size: 12px; }
+  .neg { color: var(--danger); font-family: var(--mono); font-size: 12px; }
+  .muted { color: var(--muted); }
+
+  .conf-bar {
+    display: inline-block;
+    width: 50px;
+    height: 4px;
+    background: var(--border);
+    border-radius: 2px;
+    vertical-align: middle;
+    margin-right: 6px;
+  }
+
+  .conf-fill {
+    height: 100%;
+    background: var(--accent);
+    border-radius: 2px;
+    opacity: 0.7;
+  }
+
+  .conf-val {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--muted);
+    vertical-align: middle;
+  }
+
+  /* Skip reasons */
+  .skip-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 13px;
+  }
+
+  .skip-item:last-child { border-bottom: none; }
+
+  .skip-label {
+    color: #8890aa;
+    font-family: var(--mono);
+    font-size: 12px;
+  }
+
+  .skip-count {
+    font-family: var(--mono);
+    font-weight: 600;
+    color: var(--warn);
+  }
+
+  /* Win rate ring */
+  .win-rate-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 8px 0;
+  }
+
+  .ring-label {
+    font-family: var(--mono);
+    font-size: 36px;
+    font-weight: 600;
+    color: var(--accent);
+    margin-top: 12px;
+  }
+
+  .ring-sub {
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 4px;
+  }
+
+  canvas { display: block; }
+
+  footer {
+    text-align: center;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    padding-top: 24px;
+    border-top: 1px solid var(--border);
+    margin-top: 8px;
+  }
+
+  @media (max-width: 900px) {
+    .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+    .charts-row, .bottom-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <header>
+    <div class="header-left">
+      <h1>TRADE<span>—</span>BOT <span>// performance</span></h1>
+      <div class="subtitle">Alpaca Paper Trading · AI-assisted decisions via Claude · 08 Apr 2026, 13:02</div>
+    </div>
+    <div class="live-badge">
+      <div class="live-dot"></div>
+      PAPER TRADING ACTIVE
+    </div>
+  </header>
+
+  <!-- KPI Row -->
+  <div class="kpi-grid">
+    <div class="kpi">
+      <div class="kpi-label">Total Recommendations</div>
+      <div class="kpi-value">40</div>
+      <div class="kpi-sub">AI-generated signals</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Execution Rate</div>
+      <div class="kpi-value accent">65.0%</div>
+      <div class="kpi-sub">26 executed · 14 skipped</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Win Rate</div>
+      <div class="kpi-value accent">91.7%</div>
+      <div class="kpi-sub">of closed positions</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Realised P&L</div>
+      <div class="kpi-value" style="color:#00d68f">+£235.73</div>
+      <div class="kpi-sub">paper trading</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Daily Target</div>
+      <div class="kpi-value warn">£30</div>
+      <div class="kpi-sub">max loss £50</div>
+    </div>
+  </div>
+
+  <!-- Charts Row -->
+  <div class="charts-row">
+    <div class="panel">
+      <div class="panel-title">Cumulative P&L Timeline</div>
+      <canvas id="pplChart" height="160"></canvas>
+    </div>
+    <div class="panel">
+      <div class="panel-title">P&L by Ticker</div>
+      <canvas id="tickerChart" height="160"></canvas>
+    </div>
+  </div>
+
+  <!-- Recommendations Table -->
+  <div class="panel">
+    <div class="panel-title">Recent Recommendations (last 20)</div>
+    <div style="overflow-x:auto">
+      <table>
+        <thead>
+          <tr>
+            <th>Time</th>
+            <th>Ticker</th>
+            <th>Signal</th>
+            <th>Reason</th>
+            <th>Confidence</th>
+            <th>Status</th>
+            <th>Outcome</th>
+          </tr>
+        </thead>
+        <tbody>
+          
+        <tr>
+            <td class="time-cell">2026-04-07 21:30</td>
+            <td><span class="ticker-tag">AMZN</span></td>
+            <td><span class="dir sell">SELL</span></td>
+            <td class="reason-cell">MACD crossover on 15m candle</td>
+            <td><div class="conf-bar"><div class="conf-fill" style="width:82%"></div></div><span class="conf-val">1</span></td>
+            <td><span class="badge exec">EXEC</span></td>
+            <td><span class="muted">—</span></td>
+        </tr>
+        <tr>
+            <td class="time-cell">2026-04-07 17:30</td>
+            <td><span class="ticker-tag">AAPL</span></td>
+            <td><span class="dir sell">SELL</span></td>
+            <td class="reason-cell">Volume surge 3x above average</td>
+            <td><div class="conf-bar"><div class="conf-fill" style="width:87%"></div></div><span class="conf-val">1</span></td>
+            <td><span class="badge exec">EXEC</span></td>
+            <td><span class="muted">—</span></td>
+        </tr>
+        <tr>
+            <td class="time-cell">2026-04-07 13:30</td>
+            <td><span class="ticker-tag">MSFT</span></td>
+            <td><span class="dir sell">SELL</span></td>
+            <td class="reason-cell">MACD crossover on 15m candle</td>
+            <td><div class="conf-bar"><div class="conf-fill" style="width:85%"></div></div><span class="conf-val">1</span></td>
+            <td><span class="badge exec">EXEC</span></td>
+            <td><span class="muted">—</span></td>
+        </tr>
+        <tr>
+            <td class="time-cell">2026-04-07 09:30</td>
+            <td><span class="ticker-tag">AMZN</span></td>
+            <td><span class="dir buy">BUY</span></td>
+            <td class="reason-cell">RSI oversold + bullish news sentiment</td>
+            <td><div class="conf-bar"><div class="conf-fill" style="width:85%"></div></div><span class="conf-val">1</span></td>
+            <td><span class="badge exec">EXEC</span></td>
+            <td><span class="muted">—</span></td>
+        </tr>
+        <tr>
+            <td class="time-cell">2026-04-07 05:30</td>
+            <td><span class="ticker-tag">NVDA</span></td>
+            <td><span class="dir buy">BUY</span></td>
+            <td class="reason-cell">Bollinger Band squeeze breakout</td>
+            <td><div class="conf-bar"><div class="conf-fill" style="width:65%"></div></div><span class="conf-val">1</span></td>
+            <td><span class="badge exec">EXEC</span></td>
+            <td><span class="muted">—</span></td>
+        </tr>
+        <tr>
+            <td class="time-cell">2026-04-07 01:30</td>
+            <td><span class="ticker-tag">NVDA</span></td>
+            <td><span class="dir buy">BUY</span></td>
+            <td class="reason-cell">VWAP reclaim after dip</td>
+            <td><div class="conf-bar"><div class="conf-fill" style="width:83%"></div></div><span class="conf-val">1</span></td>
+            <td><span class="badge exec">EXEC</span></td>
+            <td><span class="muted">—</span></td>
+        </tr>
+        <tr>
+            <td class="time-cell">2026-04-06 21:30</td>
+            <td><span class="ticker-tag">AAPL</span></td>
+            <td><span class="dir buy">BUY</span></td>
+            <td class="reason-cell">Bollinger Band squeeze breakout</td>
+            <td><div class="conf-bar"><div class="conf-fill" style="width:67%"></div></div><span class="conf-val">1</span></td>
+            <td><span class="badge exec">EXEC</span></td>
+            <td><span class="pos">+22.14</span></td>
+        </tr>
+        <tr>
+            <td class="time-cell">2026-04-06 17:30</td>
+            <td><span class="ticker-tag">AAPL</span></td>
+            <td><span class="dir sell">SELL</span></td>
+            <td class="reason-cell">Volume surge 3x above average</td>
+            <td><div class="conf-bar"><div class="conf-fill" style="width:83%"></div></div><span class="conf-val">1</span></td>
+            <td><span class="badge exec">EXEC</span></td>
+            <td><span class="muted">—</span></td>
+        </tr>
+        <tr>
+            <td class="time-cell">2026-04-06 13:30</td>
+            <td><span class="ticker-tag">AMZN</span></td>
+            <td><span class="dir sell">SELL</span></td>
+            <td class="reason-cell">MACD crossover on 15m candle</td>
+            <td><div class="conf-bar"><div class="conf-fill" style="width:70%"></div></div><span class="conf-val">1</span></td>
+            <td><span class="badge exec">EXEC</span></td>
+            <td><span class="pos">+36.77</span></td>
+        </tr>
+        <tr>
+            <td class="time-cell">2026-04-06 09:30</td>
+            <td><span class="ticker-tag">NVDA</span></td>
+            <td><span class="dir sell">SELL</span></td>
+            <td class="reason-cell">Bearish news — earnings miss reported</td>
+            <td><div class="conf-bar"><div class="conf-fill" style="width:85%"></div></div><span class="conf-val">1</span></td>
+            <td><span class="badge exec">EXEC</span></td>
+            <td><span class="muted">—</span></td>
+        </tr>
+        <tr>
+            <td class="time-cell">2026-04-06 05:30</td>
+            <td><span class="ticker-tag">AAPL</span></td>
+            <td><span class="dir buy">BUY</span></td>
+            <td class="reason-cell">RSI oversold + bullish news sentiment</td>
+            <td><div class="conf-bar"><div class="conf-fill" style="width:48%"></div></div><span class="conf-val">0</span></td>
+            <td><span class="badge skip">daily loss limit reached</span></td>
+            <td><span class="muted">—</span></td>
+        </tr>
+        <tr>
+            <td class="time-cell">2026-04-06 01:30</td>
+            <td><span class="ticker-tag">AAPL</span></td>
+            <td><span class="dir buy">BUY</span></td>
+            <td class="reason-cell">VWAP reclaim after dip</td>
+            <td><div class="conf-bar"><div class="conf-fill" style="width:57%"></div></div><span class="conf-val">1</span></td>
+            <td><span class="badge exec">EXEC</span></td>
+            <td><span class="muted">—</span></td>
+        </tr>
+        <tr>
+            <td class="time-cell">2026-04-05 21:30</td>
+            <td><span class="ticker-tag">TSLA</span></td>
+            <td><span class="dir sell">SELL</span></td>
+            <td class="reason-cell">VWAP reclaim after dip</td>
+            <td><div class="conf-bar"><div class="conf-fill" style="width:92%"></div></div><span class="conf-val">1</span></td>
+            <td><span class="badge skip">user skipped</span></td>
+            <td><span class="muted">—</span></td>
+        </tr>
+        <tr>
+            <td class="time-cell">2026-04-05 17:30</td>
+            <td><span class="ticker-tag">AMZN</span></td>
+            <td><span class="dir buy">BUY</span></td>
+            <td class="reason-cell">Bearish news — earnings miss reported</td>
+            <td><div class="conf-bar"><div class="conf-fill" style="width:65%"></div></div><span class="conf-val">1</span></td>
+            <td><span class="badge exec">EXEC</span></td>
+            <td><span class="muted">—</span></td>
+        </tr>
+        <tr>
+            <td class="time-cell">2026-04-05 13:30</td>
+            <td><span class="ticker-tag">NVDA</span></td>
+            <td><span class="dir sell">SELL</span></td>
+            <td class="reason-cell">VWAP reclaim after dip</td>
+            <td><div class="conf-bar"><div class="conf-fill" style="width:51%"></div></div><span class="conf-val">1</span></td>
+            <td><span class="badge exec">EXEC</span></td>
+            <td><span class="pos">+41.28</span></td>
+        </tr>
+        <tr>
+            <td class="time-cell">2026-04-05 09:30</td>
+            <td><span class="ticker-tag">MSFT</span></td>
+            <td><span class="dir buy">BUY</span></td>
+            <td class="reason-cell">RSI overbought, momentum fading</td>
+            <td><div class="conf-bar"><div class="conf-fill" style="width:90%"></div></div><span class="conf-val">1</span></td>
+            <td><span class="badge exec">EXEC</span></td>
+            <td><span class="muted">—</span></td>
+        </tr>
+        <tr>
+            <td class="time-cell">2026-04-05 05:30</td>
+            <td><span class="ticker-tag">NVDA</span></td>
+            <td><span class="dir buy">BUY</span></td>
+            <td class="reason-cell">MACD crossover on 15m candle</td>
+            <td><div class="conf-bar"><div class="conf-fill" style="width:89%"></div></div><span class="conf-val">1</span></td>
+            <td><span class="badge skip">user skipped</span></td>
+            <td><span class="muted">—</span></td>
+        </tr>
+        <tr>
+            <td class="time-cell">2026-04-05 01:30</td>
+            <td><span class="ticker-tag">AAPL</span></td>
+            <td><span class="dir sell">SELL</span></td>
+            <td class="reason-cell">Bollinger Band squeeze breakout</td>
+            <td><div class="conf-bar"><div class="conf-fill" style="width:53%"></div></div><span class="conf-val">1</span></td>
+            <td><span class="badge exec">EXEC</span></td>
+            <td><span class="pos">+39.57</span></td>
+        </tr>
+        <tr>
+            <td class="time-cell">2026-04-04 21:30</td>
+            <td><span class="ticker-tag">AMZN</span></td>
+            <td><span class="dir buy">BUY</span></td>
+            <td class="reason-cell">MACD crossover on 15m candle</td>
+            <td><div class="conf-bar"><div class="conf-fill" style="width:86%"></div></div><span class="conf-val">1</span></td>
+            <td><span class="badge exec">EXEC</span></td>
+            <td><span class="muted">—</span></td>
+        </tr>
+        <tr>
+            <td class="time-cell">2026-04-04 17:30</td>
+            <td><span class="ticker-tag">TSLA</span></td>
+            <td><span class="dir buy">BUY</span></td>
+            <td class="reason-cell">VWAP reclaim after dip</td>
+            <td><div class="conf-bar"><div class="conf-fill" style="width:50%"></div></div><span class="conf-val">0</span></td>
+            <td><span class="badge exec">EXEC</span></td>
+            <td><span class="pos">+6.76</span></td>
+        </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Bottom grid -->
+  <div class="bottom-grid">
+    <div class="panel">
+      <div class="panel-title">Per-Ticker Breakdown</div>
+      <table>
+        <thead>
+          <tr>
+            <th>Ticker</th>
+            <th>Recs</th>
+            <th>Executed</th>
+            <th>Win %</th>
+            <th>P&L</th>
+          </tr>
+        </thead>
+        <tbody>
+          
+        <tr>
+            <td><span class="ticker-tag">NVDA</span></td>
+            <td>10</td>
+            <td>6</td>
+            <td>100%</td>
+            <td class="pos">+41.28</td>
+        </tr>
+        <tr>
+            <td><span class="ticker-tag">AAPL</span></td>
+            <td>9</td>
+            <td>6</td>
+            <td>100%</td>
+            <td class="pos">+84.56</td>
+        </tr>
+        <tr>
+            <td><span class="ticker-tag">AMZN</span></td>
+            <td>11</td>
+            <td>8</td>
+            <td>100%</td>
+            <td class="pos">+108.75</td>
+        </tr>
+        <tr>
+            <td><span class="ticker-tag">MSFT</span></td>
+            <td>4</td>
+            <td>2</td>
+            <td>—</td>
+            <td class="pos">+0.00</td>
+        </tr>
+        <tr>
+            <td><span class="ticker-tag">TSLA</span></td>
+            <td>6</td>
+            <td>4</td>
+            <td>75%</td>
+            <td class="pos">+1.14</td>
+        </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">Skip Reason Breakdown</div>
+      <div class="skip-item"><span class="skip-label">user skipped</span><span class="skip-count">9</span></div><div class="skip-item"><span class="skip-label">daily loss limit reached</span><span class="skip-count">4</span></div><div class="skip-item"><span class="skip-label">low confidence</span><span class="skip-count">1</span></div>
+    </div>
+  </div>
+
+  <footer>trade-bot · github.com/LateToTheGam3/trade-bot · generated 08 Apr 2026, 13:02</footer>
+
+</div>
+
+<script>
+const accent   = '#00d68f';
+const accentBg = 'rgba(0,214,143,0.08)';
+const danger   = '#ff4757';
+const muted    = '#1e2330';
+const textMuted= '#4a5068';
+
+Chart.defaults.color = '#4a5068';
+Chart.defaults.font.family = "'IBM Plex Mono', monospace";
+Chart.defaults.font.size = 11;
+
+// P&L Timeline — cumulative
+const rawDates  = ["2026-04-02", "2026-04-03", "2026-04-04", "2026-04-05", "2026-04-06"];
+const rawValues = [-12.74, 79.23, 29.479999999999997, 80.85, 58.910000000000004];
+const cumulative = rawValues.reduce((acc, v, i) => {
+  acc.push((acc[i-1] || 0) + v);
+  return acc;
+}, []);
+
+new Chart(document.getElementById('pplChart'), {
+  type: 'line',
+  data: {
+    labels: rawDates,
+    datasets: [{
+      label: 'Cumulative P&L (£)',
+      data: cumulative,
+      borderColor: accent,
+      backgroundColor: accentBg,
+      borderWidth: 2,
+      fill: true,
+      tension: 0.4,
+      pointRadius: 4,
+      pointBackgroundColor: accent,
+    }]
+  },
+  options: {
+    responsive: true,
+    plugins: { legend: { display: false } },
+    scales: {
+      x: { grid: { color: muted } },
+      y: {
+        grid: { color: muted },
+        ticks: { callback: v => '£' + v.toFixed(2) }
+      }
+    }
+  }
+});
+
+// Per-ticker bar chart
+const tickers   = ["NVDA", "AAPL", "AMZN", "MSFT", "TSLA"];
+const tickerPpl = [41.28, 84.56, 108.75, 0.0, 1.14];
+const barColors = tickerPpl.map(v => v >= 0 ? 'rgba(0,214,143,0.7)' : 'rgba(255,71,87,0.7)');
+
+new Chart(document.getElementById('tickerChart'), {
+  type: 'bar',
+  data: {
+    labels: tickers,
+    datasets: [{
+      label: 'P&L (£)',
+      data: tickerPpl,
+      backgroundColor: barColors,
+      borderRadius: 4,
+    }]
+  },
+  options: {
+    responsive: true,
+    plugins: { legend: { display: false } },
+    scales: {
+      x: { grid: { color: muted } },
+      y: {
+        grid: { color: muted },
+        ticks: { callback: v => '£' + v }
+      }
+    }
+  }
+});
+</script>
+</body>
+</html>
