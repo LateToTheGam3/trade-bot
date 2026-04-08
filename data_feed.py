@@ -90,7 +90,7 @@ def fetch_news(ticker: str, max_articles: int = 7) -> dict:
     lines = []
     for a in articles:
         title = a.get("title", "").strip()
-        desc = a.get("description", "").strip()
+        desc = (a.get("description") or "").strip()
         date = a.get("publishedAt", "")[:10]
         source = a.get("source", {}).get("name", "Unknown")
 
