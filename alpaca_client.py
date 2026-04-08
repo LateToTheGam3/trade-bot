@@ -35,7 +35,7 @@ def get_latest_price(symbol: str) -> float:
     return data["trade"]["p"]
 
 def place_order(symbol: str, notional_usd: float, side: str,
-                take_profit_pct: float = 0.75, stop_loss_pct: float = 0.3):
+                take_profit_pct: float = 2.0, stop_loss_pct: float = 1.0):
     """
     Place a bracket order with built-in take profit and stop loss.
     side: 'buy' (long) or 'sell' (short)
@@ -44,12 +44,13 @@ def place_order(symbol: str, notional_usd: float, side: str,
     # Get current price to calculate quantity and TP/SL
     price = get_latest_price(symbol)
     qty = max(1, int(notional_usd / price))  # whole shares only
+    base = price * 1.02  # buffer above latest price to avoid rejection
 
     if side == "buy":
-        tp_price = round(price * (1 + take_profit_pct / 100), 2)
+        tp_price = round(base * (1 + take_profit_pct / 100), 2)
         sl_price = round(price * (1 - stop_loss_pct / 100), 2)
     else:
-        tp_price = round(price * (1 - take_profit_pct / 100), 2)
+        tp_price = round(base * (1 - take_profit_pct / 100), 2)
         sl_price = round(price * (1 + stop_loss_pct / 100), 2)
 
     payload = {
