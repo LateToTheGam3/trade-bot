@@ -9,13 +9,15 @@ from logger import log_trade, get_daily_ppl, print_daily_summary, log_recommenda
 
 RUN_INTERVAL_MINUTES = 30
 TRADE_AMOUNT_USD = 500
-TICKERS_TO_WATCH = ["AAPL", "NVDA", "TSLA", "MSFT", "AMZN"]
+TICKERS_TO_WATCH = ["AAPL", "NVDA", "TSLA", "MSFT", "AMZN", "APLD", "BYDDY"]
 TICKER_TO_NAME = {
     "AAPL": "Apple",
     "NVDA": "Nvidia",
     "TSLA": "Tesla",
     "MSFT": "Microsoft",
-    "AMZN": "Amazon"
+    "AMZN": "Amazon",
+    "APLD": "Applied Digital",
+    "BYDDY": "BYD"
 }
 
 def get_portfolio_summary(positions):
